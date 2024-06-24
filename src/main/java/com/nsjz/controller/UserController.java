@@ -1,19 +1,22 @@
 package com.nsjz.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nsjz.common.BaseResponse;
 import com.nsjz.common.ErrorCode;
 import com.nsjz.common.ResultUtils;
 import com.nsjz.contant.UserConstant;
 import com.nsjz.exception.BusinessException;
-import com.nsjz.model.domain.User;
-import com.nsjz.model.domain.request.UserLoginRequest;
-import com.nsjz.model.domain.request.UserRegisterRequest;
+import com.nsjz.model.dto.chart.ChartQueryRequest;
+import com.nsjz.model.dto.user.UserLoginRequest;
+import com.nsjz.model.dto.user.UserRegisterRequest;
+import com.nsjz.model.entity.Chart;
+import com.nsjz.model.entity.User;
 import com.nsjz.service.UserService;
 import io.micrometer.common.util.StringUtils;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,6 +29,7 @@ import static com.nsjz.contant.UserConstant.ADMIN_ROLE;
  */
 @RestController
 @RequestMapping("/user")
+@Tag(name="用户接口")
 public class UserController {
     @Resource
     private UserService userService;
@@ -100,16 +104,15 @@ public class UserController {
      */
     @GetMapping("/current")
     public BaseResponse<User> getCurrentUser(HttpServletRequest request) {
-        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATU);
+        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
         User currentUser = (User) userObj;
         if(currentUser ==null) {
-            throw new BusinessException(ErrorCode.NOT_LOGIN);
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
         Long userId = currentUser.getId();
         User user = userService.getById(userId);
         User safetyUser = userService.getSafetyUser(user);
-        return ResultUtils.success(safetyUser);
-    }
+        return ResultUtils.success(safetyUser);  }
 
     @GetMapping("/search")
     public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
@@ -138,11 +141,10 @@ public class UserController {
     }
     private boolean isAdmin(HttpServletRequest request) {
         // 仅管理员可查询
-        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATU);
+        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
         User user = (User) userObj;
         return user != null && user.getUserRole() == ADMIN_ROLE;
     }
-
 
 
 }

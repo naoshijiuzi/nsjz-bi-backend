@@ -1,7 +1,7 @@
 package com.nsjz.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.nsjz.model.domain.Chart;
+import com.nsjz.model.entity.Chart;
 import com.nsjz.service.ChartService;
 import com.nsjz.mapper.ChartMapper;
 import org.springframework.stereotype.Service;

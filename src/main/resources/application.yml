@@ -7,6 +7,9 @@ spring:
     url: jdbc:mysql://localhost:3306/usercenter_db
     username: root
     password: 123456
+  # session失效时间
+  session:
+    timeout: 86400
 server:
   port: 8080
   servlet:
@@ -16,5 +19,24 @@ mybatis-plus:
     map-underscore-to-camel-case: false
     #配置mapper xml的路径
   mapper-locations: classpath:src/main/resources/mapper/*.xml
+
+# springdoc-openapi项目配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.nsjz
+# knife4j的增强配置，不需要增强可以不配（建议配置一下）
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
 
 

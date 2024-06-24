@@ -1,7 +1,7 @@
 package com.nsjz.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.nsjz.model.domain.User;
+import com.nsjz.model.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -18,4 +18,8 @@ public interface UserService extends IService<User> {
     int userLogout(HttpServletRequest request);
 
     User getSafetyUser(User user);
+
+    User getLoginUser(HttpServletRequest request);
+
+    boolean isAdmin(HttpServletRequest request);
 }

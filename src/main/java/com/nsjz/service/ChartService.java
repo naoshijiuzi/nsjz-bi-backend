@@ -1,6 +1,6 @@
 package com.nsjz.service;
 
-import com.nsjz.model.domain.Chart;
+import com.nsjz.model.entity.Chart;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 /**

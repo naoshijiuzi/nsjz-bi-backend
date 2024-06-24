@@ -1,4 +1,4 @@
-package com.nsjz.model.domain.request;
+package com.nsjz.model.dto.user;
 
 import lombok.Data;
 import org.springframework.core.StandardReflectionParameterNameDiscoverer;
