@@ -10,8 +10,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nsjz.annotation.AuthCheck;
 import com.nsjz.common.*;
 import com.nsjz.contant.CommonConstant;
+import com.nsjz.contant.TaskStatus;
 import com.nsjz.exception.BusinessException;
 import com.nsjz.manager.AIManager;
+import com.nsjz.manager.RedisLimiterManager;
 import com.nsjz.model.dto.chart.ChartAddRequest;
 import com.nsjz.model.dto.chart.ChartQueryRequest;
 import com.nsjz.model.dto.chart.ChartUpdateRequest;
@@ -44,6 +46,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -54,7 +57,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/chart")
 @Slf4j
-@Tag(name = "图表接口")
 public class ChartController {
 
     @Resource
@@ -65,6 +67,9 @@ public class ChartController {
 
     @Resource
     private AIManager aiManager;
+
+    @Resource
+    private RedisLimiterManager redisLimiterManager;
 
     // region 增删改查
 
@@ -263,59 +268,6 @@ public class ChartController {
 
 
 
-  /*  @PostMapping("/upload")
-    public BaseResponse<String> uploadFile(@RequestPart("file") MultipartFile multipartFile,
-                                           GenChartByAiRequest uploadFileRequest, HttpServletRequest request) {
-        String biz = uploadFileRequest.getBiz();
-        FileUploadBizEnum fileUploadBizEnum = FileUploadBizEnum.getEnumByValue(biz);
-        if (fileUploadBizEnum == null) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        validFile(multipartFile, fileUploadBizEnum);
-        User loginUser = userService.getLoginUser(request);
-        // 文件目录：根据业务、用户来划分
-        String uuid = RandomStringUtils.randomAlphanumeric(8);
-        String filename = uuid + "-" + multipartFile.getOriginalFilename();
-        String filepath = String.format("/%s/%s/%s", fileUploadBizEnum.getValue(), loginUser.getId(), filename);
-        File file = null;
-        try {
-            // 上传文件
-            file = File.createTempFile(filepath, null);
-            multipartFile.transferTo(file);
-            cosManager.putObject(filepath, file);
-            // 返回可访问地址
-            return ResultUtils.success(FileConstant.COS_HOST + filepath);
-        } catch (Exception e) {
-            log.error("file upload error, filepath = " + filepath, e);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传失败");
-        } finally {
-            if (file != null) {
-                // 删除临时文件
-                boolean delete = file.delete();
-                if (!delete) {
-                    log.error("file delete error, filepath = {}", filepath);
-                }
-            }
-        }
-    }
-*/
-
-
-    /*private void validFile(MultipartFile multipartFile, FileUploadBizEnum fileUploadBizEnum) {
-        // 文件大小
-        long fileSize = multipartFile.getSize();
-        // 文件后缀
-        String fileSuffix = FileUtil.getSuffix(multipartFile.getOriginalFilename());
-        final long ONE_M = 1024 * 1024L;
-        if (FileUploadBizEnum.USER_AVATAR.equals(fileUploadBizEnum)) {
-            if (fileSize > ONE_M) {
-                throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件大小不能超过 1M");
-            }
-            if (!Arrays.asList("jpeg", "jpg", "svg", "png", "webp").contains(fileSuffix)) {
-                throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件类型错误");
-            }
-        }
-    }*/
 
     @PostMapping("/test")
     public BaseResponse<String> genChartByAitest(@RequestBody GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
@@ -358,6 +310,16 @@ public class ChartController {
         //图表类型
         if (StringUtils.isBlank(chartType) || !ChartType.StackDiagram.isContain(chartType)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR,"请选择图表类型");
+        }
+        //校验文件
+        long size = multipartFile.getSize();
+        String originalFilename = multipartFile.getOriginalFilename();
+        if(size>CommonConstant.ONE_MB){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,"文件过大，不得超过1MB");
+        }
+        String suffix = FileUtil.getSuffix(originalFilename);
+        if(CommonConstant.validFileSuffixList.contains(suffix)){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,"文件后缀非法");
         }
 
         GenChartByAiRequest genChartByAiRequest = new GenChartByAiRequest();
@@ -413,6 +375,113 @@ public class ChartController {
 
         return ResultUtils.success(biResponse);
     }
+
+    @PostMapping("/gen/async")
+    @Operation(summary = "异步分析")
+    public BaseResponse<BiResponse> genChartByAiAsync(@RequestParam("file") MultipartFile multipartFile, String name, String goal, String chartType, HttpServletRequest request) {
+        //校验
+        //分析目标为空
+        if (StringUtils.isBlank(goal)) {
+            throw new BusinessException(ErrorCode.NULL_ERROR, "目标为空");
+        }
+        //图表名称为空或过长
+        if (StringUtils.isNotBlank(name) && name.length() > 100) {
+            throw new BusinessException(ErrorCode.NULL_ERROR, "名称过长");
+        }
+        //图表类型
+        if (StringUtils.isBlank(chartType) || !ChartType.StackDiagram.isContain(chartType)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,"请选择图表类型");
+        }
+        //校验文件
+        long size = multipartFile.getSize();
+        String originalFilename = multipartFile.getOriginalFilename();
+        if(size>CommonConstant.ONE_MB){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,"文件过大，不得超过1MB");
+        }
+        String suffix = FileUtil.getSuffix(originalFilename);
+        if(CommonConstant.validFileSuffixList.contains(suffix)){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,"文件后缀非法");
+        }
+
+        GenChartByAiRequest genChartByAiRequest = new GenChartByAiRequest();
+        genChartByAiRequest.setChartType(chartType);
+        genChartByAiRequest.setName(name);
+        genChartByAiRequest.setFile(multipartFile);
+        genChartByAiRequest.setGoal(goal);
+
+
+
+        User loginUser = userService.getLoginUser(request);
+        //模型Id先写死
+        long biModelId = 1780133266368929793L;
+
+        //构造用户输入
+        StringBuilder userInput = new StringBuilder();
+        userInput.append("分析需求：").append("\n");
+        String userGoal=goal;
+        userGoal+=",请使用"+chartType;
+        userInput.append(userGoal).append("\n");
+
+        //压缩数据
+        String csvData = ExcelUtils.excelToCsv(genChartByAiRequest.getFile());
+        userInput.append(csvData).append("\n");
+
+
+        //保存图表
+        Chart chart = new Chart();
+        chart.setName(name);
+        chart.setGoal(goal);
+        chart.setChartData(csvData);
+        chart.setStatus(TaskStatus.WAIT);
+        chart.setUserId(loginUser.getId());
+        boolean save = chartService.save(chart);
+        if(!save){
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR,"图表保存失败");
+        }
+
+
+        //获取并处理AI返回结果
+        CompletableFuture.runAsync(()->{
+            Chart chart1 = new Chart();
+            chart1.setId(chart.getId());
+            chart1.setStatus(TaskStatus.RUNNING);
+
+            boolean b = chartService.updateById(chart1);
+            if(!b){
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR,"更新图表执行中状态失败");
+            }
+
+            String result = aiManager.doChart(biModelId, userInput.toString());
+            String[] splits = result.split("【【【【【");
+            if(splits.length<3){
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR,"AI生成错误");
+            }
+            String genChart = splits[1].trim();
+            String genResult = splits[2].trim();
+            Chart chartResult = new Chart();
+            chartResult.setId(chart.getId());
+            chartResult.setGenChart(genChart);
+            chartResult.setGenResult(genResult);
+            chartResult.setStatus(TaskStatus.SUCCEED);
+            boolean b1 = chartService.updateById(chartResult);
+            if(!b1){
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR,"更新图表成功状态失败");
+            }
+        });
+
+
+//        chart.setGenChart(genChart);
+//        chart.setGenResult(genResult);
+
+        BiResponse biResponse = new BiResponse();
+        biResponse.setChartId(chart.getId());
+//        biResponse.setGenChart(genChart);
+//        biResponse.setGenResult(genResult);
+        System.out.println(csvData);
+
+        return ResultUtils.success(biResponse);
+    }
+
 
     @Operation(summary = "文件上传-带对象参数")
     @PostMapping("/gentest")

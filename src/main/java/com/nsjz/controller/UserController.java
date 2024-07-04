@@ -29,7 +29,6 @@ import static com.nsjz.contant.UserConstant.ADMIN_ROLE;
  */
 @RestController
 @RequestMapping("/user")
-@Tag(name="用户接口")
 public class UserController {
     @Resource
     private UserService userService;
